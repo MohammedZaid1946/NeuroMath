@@ -98,14 +98,14 @@ async function callAI(systemPrompt, userPrompt) {
   let LOVABLE_API_KEY = (process.env.LOVABLE_API_KEY || "").trim();
 
   // Robust Self-Correction:
-  // If GEMINI_API_KEY starts with 'AQ.', it's actually a Lovable AI Gateway key
-  if (GEMINI_API_KEY.startsWith("AQ.") && !LOVABLE_API_KEY) {
+  // Lovable Gateway keys must start with 'sk_' prefix
+  if (GEMINI_API_KEY.startsWith("sk_") && !LOVABLE_API_KEY) {
     console.log("Auto-detected Lovable AI key in GEMINI_API_KEY field. Swapping to Lovable AI Gateway...");
     LOVABLE_API_KEY = GEMINI_API_KEY;
     GEMINI_API_KEY = "";
   }
-  // If LOVABLE_API_KEY starts with 'AIzaSy', it's actually an official Google Gemini API key
-  else if (LOVABLE_API_KEY.startsWith("AIzaSy") && !GEMINI_API_KEY) {
+  // If LOVABLE_API_KEY is set but does not start with 'sk_', and GEMINI_API_KEY is empty, it's actually an official Google Gemini key
+  else if (LOVABLE_API_KEY && !LOVABLE_API_KEY.startsWith("sk_") && !GEMINI_API_KEY) {
     console.log("Auto-detected Google Gemini key in LOVABLE_API_KEY field. Swapping to official Google Gemini API...");
     GEMINI_API_KEY = LOVABLE_API_KEY;
     LOVABLE_API_KEY = "";
