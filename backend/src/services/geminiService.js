@@ -168,16 +168,46 @@ export const generateQuestions = async (age, errorHistory = [], count = 10) => {
   try {
     const categories = ['Number Sense', 'Place Value', 'Basic Arithmetic', 'Pattern Recognition', 'Spatial Reasoning', 'Working Memory'];
     
-    // We want to fetch questions. If count is 10, we retrieve some from Mongoose cache
-    let questions = [];
+    // Determine target difficulties based on student's age group
+    let targetDifficulties = [2, 3]; // Default: Primary School (Ages 8-11)
+    let ageSpecificPrompt = '';
+    let targetDifficultyDescription = '';
     
-    // Attempt to pull cached questions from database first
+    if (age <= 7) {
+      targetDifficulties = [1, 2]; // Early Childhood (Ages 5-7)
+      targetDifficultyDescription = "difficulty level 1 to 2 (easy/concrete)";
+      ageSpecificPrompt = `
+      - Keep questions highly concrete, visual, and extremely simple.
+      - Use child-friendly items (e.g., apples, toys, blocks, balls).
+      - Numbers must remain under 20.
+      - Do NOT use abstract decimals, fractions, negative numbers, or large numbers.
+      - Examples: 'If you have 4 apples and get 2 more, how many do you have?', 'Which number is smaller: 5 or 9?'`;
+    } else if (age >= 8 && age <= 11) {
+      targetDifficulties = [2, 3]; // Primary School (Ages 8-11)
+      targetDifficultyDescription = "difficulty level 2 to 3 (medium/primary school)";
+      ageSpecificPrompt = `
+      - Questions should cover standard primary school concepts.
+      - Cover place value up to hundreds, double-digit addition/subtraction, skip counting, and basic geometric shapes.
+      - Keep word problems simple and clear.
+      - Do NOT use advanced decimals, fractions, or negative numbers.
+      - Examples: 'What is the value of the 7 in 372?', 'What is 45 + 37?', 'Complete the pattern: 3, 6, 9, 12, __'`;
+    } else {
+      targetDifficulties = [3, 4, 5]; // Middle School & Above (Ages 12+)
+      targetDifficultyDescription = "difficulty level 3 to 5 (advanced/abstract)";
+      ageSpecificPrompt = `
+      - Questions must be abstract and appropriate for older students, middle schoolers, or high schoolers.
+      - Include concepts like decimals, fractions, percentages, negative numbers, multi-step spatial reasoning, and working memory tasks.
+      - Avoid trivial, childish, or overly simplistic questions.
+      - Examples: 'Which is larger: 0.6 or 0.45?', 'Which number is smaller: -5 or -2?', 'Arrange in order: 1/4, 1/2, 3/4'`;
+    }
+
+    // Attempt to pull cached questions from database matching the targeted age difficulties
     const cachedQuestions = await Question.find({
-      difficulty: { $lte: age <= 7 ? 2 : age <= 11 ? 3 : 5 }
+      difficulty: { $in: targetDifficulties }
     });
     
     if (cachedQuestions.length >= count) {
-      console.log("Found sufficient questions in local MongoDB cache!");
+      console.log(`Found sufficient targeted questions (difficulties: ${targetDifficulties.join(', ')}) in local MongoDB cache for age ${age}!`);
       // Shuffle and pick
       const shuffled = cachedQuestions.sort(() => 0.5 - Math.random());
       return shuffled.slice(0, count).map(q => ({
@@ -189,34 +219,39 @@ export const generateQuestions = async (age, errorHistory = [], count = 10) => {
       }));
     }
     
-    // Call Gemini API to generate questions
+    // Call Gemini API to generate questions with strict age-appropriate instructions
     const errorContext = errorHistory.length > 0
       ? `The student has struggled with: ${errorHistory.map(e => e.construct).join(', ')}. Adjust difficulty accordingly.`
       : '';
-
-    const systemPrompt = `You are a dyscalculia diagnostic expert. Generate ${count} adaptive math question${count > 1 ? 's' : ''} for a ${age}-year-old student.
+ 
+    const systemPrompt = `You are a dyscalculia diagnostic expert. Generate ${count} adaptive math question${count > 1 ? 's' : ''} specifically designed for a ${age}-year-old student.
     
-${errorContext}
-
-Each question should test one of these mathematical constructs:
-- Number Sense (magnitude comparison, number line understanding)
-- Place Value (understanding tens, hundreds, etc.)
-- Basic Arithmetic (addition, subtraction appropriate for age)
-- Pattern Recognition
-- Spatial Reasoning
-- Working Memory (multi-step problems)
-
-Return ONLY a JSON array with this exact structure:
-[
-  {
-    "questionText": "Clear question text",
-    "correctAnswer": "The correct answer",
-    "construct": "Construct being tested (must be exactly one of: 'Number Sense', 'Place Value', 'Basic Arithmetic', 'Pattern Recognition', 'Spatial Reasoning', 'Working Memory')",
-    "difficultyLevel": 1-5
-  }
-]
-
-Make sure questions vary in difficulty and test different constructs.`;
+    The target difficulty for this student's age group is: ${targetDifficultyDescription}.
+    
+    Strict Age-Appropriate Guidelines:
+    ${ageSpecificPrompt}
+    
+    ${errorContext}
+    
+    Each question should test one of these mathematical constructs:
+    - Number Sense (magnitude comparison, number line understanding)
+    - Place Value (understanding tens, hundreds, etc.)
+    - Basic Arithmetic (addition, subtraction appropriate for age)
+    - Pattern Recognition
+    - Spatial Reasoning
+    - Working Memory (multi-step problems)
+    
+    Return ONLY a JSON array with this exact structure:
+    [
+      {
+        "questionText": "Clear question text",
+        "correctAnswer": "The correct answer",
+        "construct": "Construct being tested (must be exactly one of: 'Number Sense', 'Place Value', 'Basic Arithmetic', 'Pattern Recognition', 'Spatial Reasoning', 'Working Memory')",
+        "difficultyLevel": 1-5
+      }
+    ]
+    
+    Make sure questions vary in difficulty and test different constructs.`;
 
     const rawResponse = await callAI(systemPrompt, `Generate ${count} diagnostic math questions for age ${age}.`);
     
