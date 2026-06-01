@@ -16,7 +16,7 @@ const app = express();
 
 // Middlewares
 app.use(cors({
-  origin: '*', // Allow all origins for development, can be locked down to VITE port in production
+  origin: true, // Dynamically reflect request origin to support credentials securely in production
   credentials: true
 }));
 app.use(express.json());
