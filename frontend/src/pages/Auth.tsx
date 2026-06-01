@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "../context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,23 +16,18 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user, login, register } = useAuth();
 
+  // If user is already logged in, redirect them immediately to their dashboard
   useEffect(() => {
-    // Check if user is already logged in
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
+    if (user) {
+      if (user.role === "admin") {
+        navigate("/admin");
+      } else {
         navigate("/dashboard");
       }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session && event === "SIGNED_IN") {
-        navigate("/dashboard");
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [navigate]);
+    }
+  }, [user, navigate]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,36 +35,30 @@ export default function Auth() {
 
     try {
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/dashboard`,
-            data: {
-              full_name: fullName,
-            },
-          },
-        });
-
-        if (error) throw error;
+        if (!fullName.trim()) {
+          throw new Error("Please enter your full name.");
+        }
+        
+        await register(fullName, email, password);
 
         toast({
           title: "Account created successfully!",
-          description: "You can now sign in with your credentials.",
+          description: "Welcome to NeuroMath AI! Your student account is ready.",
         });
-        setIsSignUp(false);
+        navigate("/dashboard");
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-
-        if (error) throw error;
+        const loggedInUser = await login(email, password);
 
         toast({
           title: "Welcome back!",
-          description: "Successfully signed in.",
+          description: `Successfully signed in as ${loggedInUser.name}.`,
         });
+
+        if (loggedInUser.role === "admin") {
+          navigate("/admin");
+        } else {
+          navigate("/dashboard");
+        }
       }
     } catch (error: any) {
       toast({
@@ -84,22 +73,24 @@ export default function Auth() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-primary/5 to-accent/5 p-4">
-      <Card className="w-full max-w-md shadow-lg">
+      <Card className="w-full max-w-md shadow-lg border border-border/50 bg-card/65 backdrop-blur-md">
         <CardHeader className="space-y-2 text-center">
           <div className="flex justify-center mb-4">
-            <div className="p-3 bg-primary/10 rounded-full">
+            <div className="p-3 bg-primary/10 rounded-full animate-pulse-glow">
               <Brain className="w-12 h-12 text-primary" />
             </div>
           </div>
-          <CardTitle className="text-3xl font-bold">NeuroMath AI</CardTitle>
+          <CardTitle className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary-glow">
+            NeuroMath AI
+          </CardTitle>
           <CardDescription>
-            {isSignUp ? "Create your teacher account" : "Sign in to your account"}
+            {isSignUp ? "Create your student account" : "Sign in to your account"}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleAuth} className="space-y-4">
             {isSignUp && (
-              <div className="space-y-2">
+              <div className="space-y-2 animate-fade-in">
                 <Label htmlFor="fullName">Full Name</Label>
                 <Input
                   id="fullName"
@@ -108,6 +99,7 @@ export default function Auth() {
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   required={isSignUp}
+                  className="bg-background/50 border-border/50 focus:border-primary/50"
                 />
               </div>
             )}
@@ -116,10 +108,11 @@ export default function Auth() {
               <Input
                 id="email"
                 type="email"
-                placeholder="teacher@school.edu"
+                placeholder="student@school.edu"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                className="bg-background/50 border-border/50 focus:border-primary/50"
               />
             </div>
             <div className="space-y-2">
@@ -132,19 +125,20 @@ export default function Auth() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={6}
+                className="bg-background/50 border-border/50 focus:border-primary/50"
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Processing..." : isSignUp ? "Create Account" : "Sign In"}
+            <Button type="submit" className="w-full shadow-md hover:shadow-lg transition-all" disabled={loading}>
+              {loading ? "Processing..." : isSignUp ? "Create Student Account" : "Sign In"}
             </Button>
           </form>
           <div className="mt-6 text-center">
             <button
               type="button"
               onClick={() => setIsSignUp(!isSignUp)}
-              className="text-sm text-primary hover:underline"
+              className="text-sm text-primary hover:underline hover:text-primary-glow transition-all"
             >
-              {isSignUp ? "Already have an account? Sign in" : "Don't have an account? Sign up"}
+              {isSignUp ? "Already have a student account? Sign in" : "Don't have an account? Sign up as Student"}
             </button>
           </div>
         </CardContent>

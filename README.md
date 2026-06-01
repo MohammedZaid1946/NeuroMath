@@ -1,69 +1,127 @@
-THIS PROJECT WAS BOOTSTRAPPED WITH USING LOVABLE 
+# NeuroMath AI - Dyscalculia Detection & Classroom Remediation Navigator
 
-## Project info
+An adaptive, AI-powered diagnostic and classroom remediation system built to identify and support students experiencing dyscalculia characteristics. 
 
-**Project name**: Neuromath Navigator
+This repository has been fully migrated and refactored from a simple Supabase template into a production-ready, custom **full-stack Node.js, Express, MongoDB (Mongoose), and React architecture** with secure JWT role-based workflows and Gemini question caching.
 
-**Description**: A smart diagnostic tool that finds why a student struggles in math and gives them the exact exercises they need to improve—built especially for students with dyscalculia. It also includes an intuitive teacher dashboard that tracks progress, highlights learning blockers, and helps educators deliver targeted support.
+---
 
-**URL**: https://neuromathai.netlify.app
+## 🏗 Project Architecture
 
-**Git repository of first version**: https://github.com/Horizon-Research-Group/build-with
+The project is divided into two decoupled folders at the root level:
 
-## How can I edit this code?
-
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/b141663a-d07a-463b-8c33-03efbebbfd49) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```
+project-root/
+├── frontend/             # Vite + React (TypeScript, Tailwind, shadcn/ui, Axios)
+├── backend/              # Node.js + Express.js REST API with MongoDB & Mongoose
+└── README.md             # This document
 ```
 
-**Edit a file directly in GitHub**
+---
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## 🔑 Authentication, Authorization & Roles
 
-**Use GitHub Codespaces**
+Authentication is implemented from scratch using **JSON Web Tokens (JWT)** and **bcryptjs** password hashing:
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+1. **Admin (`admin` role)**:
+   - Accessible via the `/admin` route.
+   - Default Admin account is seeded automatically on backend startup.
+   - **Credentials**:
+     - **Email**: `admin@neuromath.ai`
+     - **Password**: `Admin@NeuroMath123`
+   - **Capabilities**: Accesses the Admin Dashboard to monitor platform usage, view active teachers, and **securely create Teacher accounts** (disabling public educator signup for maximum platform security).
+2. **Teacher (`teacher` role)**:
+   - Accessible via `/dashboard` once logged in.
+   - Accounts must be created by the Admin.
+   - **Capabilities**: Accesses the Teacher Dashboard to view all student test records, monitor detected cognitive blockers, review severity metrics, and analyze AI-generated roadmaps.
+3. **Student (`student` role)**:
+   - Registers publicly on the sign-up page (defaulting to the `student` role).
+   - Accessible via `/dashboard` once logged in.
+   - **Capabilities**: Starts or resumes adaptive diagnostic tests, deletes unfinished tests, and views their personal assessment report history.
 
-## What technologies are used for this project?
+---
 
-This project is built with:
+## 💾 Database Schema (MongoDB Mongoose)
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-- Supabase
+1. **User**: Name, unique lowercase email, hashed password, role (`student`, `teacher`, `admin`), and timestamps.
+2. **TestSession**: Tracks in-progress, completed, and abandoned tests. Stores `currentQuestionIndex` and the entire list of generated questions (`questionsList`) to support robust autosaving and resuming.
+3. **Question**: Stores and caches generated math questions categorized by construct/difficulty to avoid redundant Gemini API rate limits and minimize costs.
+4. **Result**: Stores completed diagnostic reports (Dyscalculia likelihood percentage, overall severity classification, strengths, weaknesses, blocker reports, and roadmap recommendations).
 
+---
+
+## ⚡️ Gemini AI Service & Caching Engine
+
+Located inside `backend/src/services/geminiService.js`, the AI service performs:
+1. **Adaptive Question Generation**: Generates tests matching student age and historical performance.
+2. **Mongoose Caching**: Automatically saves Gemini-generated questions in the database, drawing from cached questions for future tests when a matching construct/difficulty is requested.
+3. **Blocker Analysis & Roadmap Generation**: Compiles the personalized 5-step action plan using multi-sensory techniques.
+4. **Graceful Failover / Offline Fallbacks**: Features robust, high-quality pre-coded questions and roadmap plans to guarantee the system remains fully operational even if Gemini keys are unconfigured or offline.
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+- [Node.js](https://nodejs.org/) (v18.0.0+ recommended)
+- [MongoDB](https://www.mongodb.com/) (running locally on port 27017)
+
+---
+
+### Step 1: Start MongoDB
+
+Verify MongoDB is running locally. If using Homebrew on macOS, start it with:
+```bash
+brew services start mongodb-community
+```
+
+---
+
+### Step 2: Configure & Start the Backend
+
+1. Navigate to the backend folder:
+   ```bash
+   cd backend
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Set up your `.env` configuration (a template is provided in `.env.example`):
+   ```env
+   PORT=5001
+   MONGO_URI=mongodb://localhost:27017/neuromath
+   JWT_SECRET=your_jwt_signing_secret_here
+   GEMINI_API_KEY=your_google_gemini_api_key_here
+   ```
+4. Run the development server:
+   ```bash
+   npm run dev
+   ```
+   *Note: On boot, the console will print confirmation when the default Admin account is seeded.*
+
+---
+
+### Step 3: Configure & Start the Frontend
+
+1. Navigate to the frontend folder:
+   ```bash
+   cd ../frontend
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Run the frontend development server:
+   ```bash
+   npm run dev
+   ```
+4. Open [http://localhost:5173](http://localhost:5173) in your browser.
+
+---
+
+## 🧪 Verification Tasks
+
+1. **Admin Portal**: Log in as `admin@neuromath.ai` / `Admin@NeuroMath123`, navigate to `/admin`, and register a new teacher (e.g., `teacher1@school.edu` / `password123`).
+2. **Teacher Workspace**: Log in with the newly registered teacher credentials. Confirm the empty dashboard displays correctly.
+3. **Student Test Runner**: Register a new student publicly, log in, start a diagnostic test, answer 3 questions, and close/refresh the browser. Relog to verify you can resume the test seamlessly or delete it.
