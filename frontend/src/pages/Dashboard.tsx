@@ -196,9 +196,12 @@ export default function Dashboard() {
       <header className="border-b border-border/50 bg-card/30 backdrop-blur-sm sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Brain className="w-8 h-8 text-primary flex-shrink-0" />
-              <h1 className="text-xl sm:text-2xl font-bold truncate">NeuroMath AI Dashboard</h1>
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <Brain className="w-7 h-7 sm:w-8 sm:h-8 text-primary flex-shrink-0" />
+              <h1 className="text-lg sm:text-2xl font-bold truncate">
+                <span className="sm:hidden">NeuroMath AI</span>
+                <span className="hidden sm:inline">NeuroMath AI Dashboard</span>
+              </h1>
             </div>
             <div className="flex items-center gap-2.5 sm:gap-4">
               <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground bg-card px-3 py-1.5 rounded-full border border-border/50">
