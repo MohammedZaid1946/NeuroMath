@@ -93,8 +93,22 @@ const FALLBACK_CONFIRMATORY = {
 
 // Main API call wrapper supporting Gemini API and Lovable Gateway
 async function callAI(systemPrompt, userPrompt) {
-  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-  const LOVABLE_API_KEY = process.env.LOVABLE_API_KEY;
+  let GEMINI_API_KEY = (process.env.GEMINI_API_KEY || "").trim();
+  let LOVABLE_API_KEY = (process.env.LOVABLE_API_KEY || "").trim();
+
+  // Robust Self-Correction:
+  // If GEMINI_API_KEY starts with 'AQ.', it's actually a Lovable AI Gateway key
+  if (GEMINI_API_KEY.startsWith("AQ.") && !LOVABLE_API_KEY) {
+    console.log("Auto-detected Lovable AI key in GEMINI_API_KEY field. Swapping to Lovable AI Gateway...");
+    LOVABLE_API_KEY = GEMINI_API_KEY;
+    GEMINI_API_KEY = "";
+  }
+  // If LOVABLE_API_KEY starts with 'AIzaSy', it's actually an official Google Gemini API key
+  else if (LOVABLE_API_KEY.startsWith("AIzaSy") && !GEMINI_API_KEY) {
+    console.log("Auto-detected Google Gemini key in LOVABLE_API_KEY field. Swapping to official Google Gemini API...");
+    GEMINI_API_KEY = LOVABLE_API_KEY;
+    LOVABLE_API_KEY = "";
+  }
 
   if (GEMINI_API_KEY) {
     try {
@@ -122,7 +136,8 @@ async function callAI(systemPrompt, userPrompt) {
         const data = await response.json();
         return data.candidates[0].content.parts[0].text;
       } else {
-        console.warn(`Gemini API returned status: ${response.status}`);
+        const errText = await response.text();
+        console.warn(`Gemini API returned status ${response.status}: ${errText}`);
       }
     } catch (err) {
       console.error("Failed to query official Gemini API:", err.message);
@@ -151,7 +166,8 @@ async function callAI(systemPrompt, userPrompt) {
         const data = await response.json();
         return data.choices[0].message.content;
       } else {
-        console.warn(`Lovable AI Gateway returned status: ${response.status}`);
+        const errText = await response.text();
+        console.warn(`Lovable AI Gateway returned status ${response.status}: ${errText}`);
       }
     } catch (err) {
       console.error("Failed to query Lovable AI Gateway:", err.message);
