@@ -111,67 +111,111 @@ async function callAI(systemPrompt, userPrompt) {
     LOVABLE_API_KEY = "";
   }
 
-  if (GEMINI_API_KEY) {
-    try {
-      console.log("Calling official Google Gemini API (gemini-2.5-flash)...");
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: `${systemPrompt}\n\nUser Request: ${userPrompt}` }]
-              }
-            ],
-            generationConfig: {
-              responseMimeType: "application/json"
-            }
-          })
-        }
-      );
+  const maxRetries = 3;
 
-      if (response.ok) {
-        const data = await response.json();
-        return data.candidates[0].content.parts[0].text;
-      } else {
-        const errText = await response.text();
-        console.warn(`Gemini API returned status ${response.status}: ${errText}`);
+  if (GEMINI_API_KEY) {
+    // Model fallback sequence: On high demand, fall back to highly-stable gemini-1.5-flash
+    const models = ["gemini-2.5-flash", "gemini-1.5-flash"];
+    let backoff = 1000;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const model = models[Math.min(attempt - 1, models.length - 1)];
+      try {
+        console.log(`Calling official Google Gemini API (${model}) - Attempt ${attempt}/${maxRetries}...`);
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [
+                {
+                  role: "user",
+                  parts: [{ text: `${systemPrompt}\n\nUser Request: ${userPrompt}` }]
+                }
+              ],
+              generationConfig: {
+                responseMimeType: "application/json"
+              }
+            })
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          return data.candidates[0].content.parts[0].text;
+        } else {
+          const errText = await response.text();
+          console.warn(`Gemini API (${model}) returned status ${response.status}: ${errText}`);
+          
+          // Retry on 503 (spikes in demand / overloaded), 429 (rate limits), or 500 (internal error)
+          if ([503, 429, 500].includes(response.status) && attempt < maxRetries) {
+            console.log(`Spike in demand or transient error (${response.status}) on ${model}. Retrying in ${backoff}ms...`);
+            await new Promise(resolve => setTimeout(resolve, backoff));
+            backoff *= 2;
+            continue;
+          }
+          break;
+        }
+      } catch (err) {
+        console.error(`Attempt ${attempt} failed to query official Gemini API (${model}):`, err.message);
+        if (attempt < maxRetries) {
+          console.log(`Retrying in ${backoff}ms...`);
+          await new Promise(resolve => setTimeout(resolve, backoff));
+          backoff *= 2;
+          continue;
+        }
       }
-    } catch (err) {
-      console.error("Failed to query official Gemini API:", err.message);
     }
   }
 
   if (LOVABLE_API_KEY) {
-    try {
-      console.log("Calling Lovable AI Gateway...");
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt }
-          ],
-        }),
-      });
+    const models = ["google/gemini-2.5-flash", "google/gemini-1.5-flash"];
+    let backoff = 1000;
 
-      if (response.ok) {
-        const data = await response.json();
-        return data.choices[0].message.content;
-      } else {
-        const errText = await response.text();
-        console.warn(`Lovable AI Gateway returned status ${response.status}: ${errText}`);
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const model = models[Math.min(attempt - 1, models.length - 1)];
+      try {
+        console.log(`Calling Lovable AI Gateway (${model}) - Attempt ${attempt}/${maxRetries}...`);
+        const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: model,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt }
+            ],
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          return data.choices[0].message.content;
+        } else {
+          const errText = await response.text();
+          console.warn(`Lovable AI Gateway (${model}) returned status ${response.status}: ${errText}`);
+          
+          if ([503, 429, 500].includes(response.status) && attempt < maxRetries) {
+            console.log(`Transient error (${response.status}) on ${model}. Retrying in ${backoff}ms...`);
+            await new Promise(resolve => setTimeout(resolve, backoff));
+            backoff *= 2;
+            continue;
+          }
+          break;
+        }
+      } catch (err) {
+        console.error(`Attempt ${attempt} failed to query Lovable AI Gateway (${model}):`, err.message);
+        if (attempt < maxRetries) {
+          console.log(`Retrying in ${backoff}ms...`);
+          await new Promise(resolve => setTimeout(resolve, backoff));
+          backoff *= 2;
+          continue;
+        }
       }
-    } catch (err) {
-      console.error("Failed to query Lovable AI Gateway:", err.message);
     }
   }
 
