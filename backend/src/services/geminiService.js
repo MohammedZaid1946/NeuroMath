@@ -1,4 +1,5 @@
 import Question from '../models/Question.js';
+import TestSession from '../models/TestSession.js';
 
 // Pre-defined high-quality offline fallbacks for diagnostics (if Gemini key is missing or calls fail)
 const FALLBACK_QUESTIONS = [
@@ -178,7 +179,7 @@ async function callAI(systemPrompt, userPrompt) {
 }
 
 /**
- * Generates questions adaptive to age and history, utilising Mongoose cache
+ * Generates questions adaptive to age and history, utilising Mongoose cache as fallback
  */
 export const generateQuestions = async (age, errorHistory = [], count = 10) => {
   try {
@@ -217,25 +218,7 @@ export const generateQuestions = async (age, errorHistory = [], count = 10) => {
       - Examples: 'Which is larger: 0.6 or 0.45?', 'Which number is smaller: -5 or -2?', 'Arrange in order: 1/4, 1/2, 3/4'`;
     }
 
-    // Attempt to pull cached questions from database matching the targeted age difficulties
-    const cachedQuestions = await Question.find({
-      difficulty: { $in: targetDifficulties }
-    });
-    
-    if (cachedQuestions.length >= count) {
-      console.log(`Found sufficient targeted questions (difficulties: ${targetDifficulties.join(', ')}) in local MongoDB cache for age ${age}!`);
-      // Shuffle and pick
-      const shuffled = cachedQuestions.sort(() => 0.5 - Math.random());
-      return shuffled.slice(0, count).map(q => ({
-        questionText: q.questionText,
-        options: q.options,
-        correctAnswer: q.correctAnswer,
-        construct: q.category,
-        difficultyLevel: q.difficulty
-      }));
-    }
-    
-    // Call Gemini API to generate questions with strict age-appropriate instructions
+    // Call Gemini API to generate questions with strict age-appropriate instructions FIRST
     const errorContext = errorHistory.length > 0
       ? `The student has struggled with: ${errorHistory.map(e => e.construct).join(', ')}. Adjust difficulty accordingly.`
       : '';
@@ -269,34 +252,60 @@ export const generateQuestions = async (age, errorHistory = [], count = 10) => {
     
     Make sure questions vary in difficulty and test different constructs.`;
 
-    const rawResponse = await callAI(systemPrompt, `Generate ${count} diagnostic math questions for age ${age}.`);
-    
-    const jsonMatch = rawResponse.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) throw new Error("Failed to extract JSON array from Gemini response.");
-    
-    const generated = JSON.parse(jsonMatch[0]);
-    
-    // Cache the generated questions in the background
-    for (const q of generated) {
-      try {
-        await Question.create({
-          questionText: q.questionText,
-          options: q.options || [],
-          correctAnswer: q.correctAnswer,
-          category: q.construct,
-          difficulty: q.difficultyLevel || 2,
-          generatedByGemini: true
-        });
-      } catch (cacheErr) {
-        console.error("Error caching question in MongoDB:", cacheErr.message);
+    try {
+      console.log(`Calling AI API to generate ${count} adaptive questions for age ${age}...`);
+      const rawResponse = await callAI(systemPrompt, `Generate ${count} diagnostic math questions for age ${age}.`);
+      
+      const jsonMatch = rawResponse.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) throw new Error("Failed to extract JSON array from Gemini response.");
+      
+      const generated = JSON.parse(jsonMatch[0]);
+      
+      // Cache the generated questions in the background
+      for (const q of generated) {
+        try {
+          await Question.create({
+            questionText: q.questionText,
+            options: q.options || [],
+            correctAnswer: q.correctAnswer,
+            category: q.construct,
+            difficulty: q.difficultyLevel || 2,
+            generatedByGemini: true
+          });
+        } catch (cacheErr) {
+          console.error("Error caching question in MongoDB:", cacheErr.message);
+        }
       }
-    }
 
-    return generated;
+      return generated;
+    } catch (apiError) {
+      console.warn(`AI Question generation failed, falling back to local DB cache. Reason: ${apiError.message}`);
+
+      // FALLBACK 1: Try local MongoDB cache matching the targeted difficulties
+      const cachedQuestions = await Question.find({
+        difficulty: { $in: targetDifficulties }
+      });
+      
+      if (cachedQuestions.length >= count) {
+        console.log(`Fallback Success: Found sufficient targeted questions (difficulties: ${targetDifficulties.join(', ')}) in local MongoDB cache for age ${age}!`);
+        // Shuffle and pick
+        const shuffled = cachedQuestions.sort(() => 0.5 - Math.random());
+        return shuffled.slice(0, count).map(q => ({
+          questionText: q.questionText,
+          options: q.options,
+          correctAnswer: q.correctAnswer,
+          construct: q.category,
+          difficultyLevel: q.difficulty
+        }));
+      }
+
+      // If local DB doesn't have enough, throw to trigger hardcoded offline fallbacks
+      throw new Error("Local MongoDB cache has insufficient questions.");
+    }
   } catch (error) {
-    console.error("GeminiService: generateQuestions failed, returning high-quality fallbacks. Reason:", error.message);
+    console.error("GeminiService: generateQuestions failed, returning high-quality offline fallbacks. Reason:", error.message);
     
-    // Returns our pre-defined high-quality offline fallback questions
+    // FALLBACK 2: Returns our pre-defined high-quality offline fallback questions
     const shuffled = [...FALLBACK_QUESTIONS].sort(() => 0.5 - Math.random());
     return shuffled.slice(0, count).map(q => ({
       questionText: q.questionText,
@@ -309,24 +318,10 @@ export const generateQuestions = async (age, errorHistory = [], count = 10) => {
 };
 
 /**
- * Generates 5 confirmatory questions focusing on a specific blocker
+ * Generates 5 confirmatory questions focusing on a specific blocker, utilizing local cache as fallback
  */
 export const generateConfirmatoryQuestions = async (age, blockerName) => {
   try {
-    // Attempt cache check
-    const cached = await Question.find({ category: blockerName });
-    if (cached.length >= 5) {
-      console.log(`Found sufficient confirmatory questions for blocker '${blockerName}' in cache!`);
-      const shuffled = cached.sort(() => 0.5 - Math.random());
-      return shuffled.slice(0, 5).map(q => ({
-        questionText: q.questionText,
-        options: q.options,
-        correctAnswer: q.correctAnswer,
-        construct: q.category,
-        difficultyLevel: q.difficulty
-      }));
-    }
-
     const systemPrompt = `You are a dyscalculia diagnostic expert. Generate 5 confirmatory test questions specifically targeting "${blockerName}" for a ${age}-year-old student.
 
 These questions should deeply probe this specific deficit area to confirm the diagnosis.
@@ -341,32 +336,54 @@ Return ONLY a JSON array with 5 objects, each having this exact structure:
   }
 ]`;
 
-    const rawResponse = await callAI(systemPrompt, `Generate 5 confirmatory questions for ${blockerName}.`);
-    const jsonMatch = rawResponse.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) throw new Error("Failed to extract JSON array from Gemini response.");
+    try {
+      console.log(`Calling AI API to generate 5 confirmatory questions for '${blockerName}' (age ${age})...`);
+      const rawResponse = await callAI(systemPrompt, `Generate 5 confirmatory questions for ${blockerName}.`);
+      const jsonMatch = rawResponse.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) throw new Error("Failed to extract JSON array from Gemini response.");
 
-    const generated = JSON.parse(jsonMatch[0]);
+      const generated = JSON.parse(jsonMatch[0]);
 
-    // Cache in database
-    for (const q of generated) {
-      try {
-        await Question.create({
-          questionText: q.questionText,
-          options: q.options || [],
-          correctAnswer: q.correctAnswer,
-          category: q.construct,
-          difficulty: q.difficultyLevel || 3,
-          generatedByGemini: true
-        });
-      } catch (cacheErr) {
-        console.error("Error caching confirmatory question:", cacheErr.message);
+      // Cache in database in background
+      for (const q of generated) {
+        try {
+          await Question.create({
+            questionText: q.questionText,
+            options: q.options || [],
+            correctAnswer: q.correctAnswer,
+            category: q.construct,
+            difficulty: q.difficultyLevel || 3,
+            generatedByGemini: true
+          });
+        } catch (cacheErr) {
+          console.error("Error caching confirmatory question:", cacheErr.message);
+        }
       }
-    }
 
-    return generated;
+      return generated;
+    } catch (apiError) {
+      console.warn(`AI Confirmatory generation failed for '${blockerName}', falling back to local DB cache. Reason: ${apiError.message}`);
+
+      // FALLBACK 1: Attempt cache check
+      const cached = await Question.find({ category: blockerName });
+      if (cached.length >= 5) {
+        console.log(`Fallback Success: Found sufficient confirmatory questions for blocker '${blockerName}' in cache!`);
+        const shuffled = cached.sort(() => 0.5 - Math.random());
+        return shuffled.slice(0, 5).map(q => ({
+          questionText: q.questionText,
+          options: q.options,
+          correctAnswer: q.correctAnswer,
+          construct: q.category,
+          difficultyLevel: q.difficulty
+        }));
+      }
+
+      throw new Error("Local MongoDB cache has insufficient confirmatory questions.");
+    }
   } catch (error) {
-    console.error(`GeminiService: generateConfirmatory failed for '${blockerName}', returning fallbacks.`, error.message);
+    console.error(`GeminiService: generateConfirmatory failed for '${blockerName}', returning hardcoded fallbacks.`, error.message);
     
+    // FALLBACK 2: Returns our pre-defined high-quality offline confirmatory fallbacks
     const fallbackList = FALLBACK_CONFIRMATORY[blockerName] || FALLBACK_CONFIRMATORY["Number Sense"];
     return fallbackList.map(q => ({
       questionText: q.questionText,
@@ -382,6 +399,9 @@ Return ONLY a JSON array with 5 objects, each having this exact structure:
  * Generates personalized remediation roadmap and diagnostic summary
  */
 export const generateRoadmap = async (age, blockers, responses) => {
+  const severity = blockers.length >= 3 ? "severe" : blockers.length >= 2 ? "moderate" : blockers.length >= 1 ? "mild" : "none";
+  const blockerNames = blockers.map(b => b.blocker_name);
+
   try {
     const blockersText = blockers.map(b => `${b.blocker_name} (${b.error_count} errors)`).join(', ');
     
@@ -425,18 +445,33 @@ Return ONLY a JSON object with this exact structure:
   ]
 }`;
 
+    console.log(`Calling AI API to generate dynamic remediation roadmap for age ${age} (${severity} severity)...`);
     const rawResponse = await callAI(systemPrompt, "Generate the personalized remediation roadmap.");
     const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("Failed to extract JSON object from Gemini response.");
 
     return JSON.parse(jsonMatch[0]);
   } catch (error) {
-    console.error("GeminiService: generateRoadmap failed, returning robust offline fallback. Reason:", error.message);
+    console.warn("GeminiService: generateRoadmap failed. Reason:", error.message);
 
-    // High quality offline fallback roadmap based on number of blockers
-    const severity = blockers.length >= 3 ? "severe" : blockers.length >= 2 ? "moderate" : blockers.length >= 1 ? "mild" : "none";
-    const blockerNames = blockers.map(b => b.blocker_name);
-    
+    // FALLBACK 1: Try to query local DB (completed sessions) to find a previously generated AI roadmap with the same overallSeverity
+    try {
+      console.log(`Searching MongoDB for a cached AI roadmap with severity '${severity}'...`);
+      const matchedSession = await TestSession.findOne({
+        status: 'completed',
+        'analysisResult.overallSeverity': severity
+      });
+
+      if (matchedSession && matchedSession.analysisResult) {
+        console.log(`Fallback Success: Found a cached AI roadmap with severity '${severity}' from Session ID: ${matchedSession._id}`);
+        return matchedSession.analysisResult;
+      }
+    } catch (dbErr) {
+      console.error("Error fetching cached roadmap from MongoDB:", dbErr.message);
+    }
+
+    // FALLBACK 2: Returns our pre-defined high-quality offline fallback roadmap
+    console.log(`Falling back to hardcoded default offline roadmap for severity '${severity}'...`);
     return {
       overallSeverity: severity,
       summary: `The diagnostic test indicates a ${severity} likelihood of dyscalculia characteristics, specifically impacting ${blockerNames.length > 0 ? blockerNames.join(', ') : 'general arithmetic fluency'}. The student shows strengths in fully answered constructs but faces recurring cognitive blocks when dealing with direct applications.`,
