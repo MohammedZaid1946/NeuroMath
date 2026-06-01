@@ -368,18 +368,31 @@ Return ONLY a JSON array with 5 objects, each having this exact structure:
 export const generateRoadmap = async (age, blockers, responses) => {
   try {
     const blockersText = blockers.map(b => `${b.blocker_name} (${b.error_count} errors)`).join(', ');
+    
+    // Format the individual responses with questions, student answers, correct answers, and results
+    const responsesText = responses.map(r => 
+      `Question ${r.questionNumber}: "${r.questionText}"
+       - Student Answer: "${r.userAnswer}"
+       - Correct Answer: "${r.correctAnswer}"
+       - Result: ${r.isCorrect ? 'Correct' : 'Incorrect'}
+       - Construct: ${r.construct}
+       - Difficulty Level: ${r.difficultyLevel}`
+    ).join('\n\n');
 
-    const systemPrompt = `You are an expert dyscalculia remediation specialist. Based on the diagnostic test results, create a personalized 5-step remediation roadmap.
-
-Student Profile:
-- Age: ${age} years old
-- Detected Blockers: ${blockersText}
-- Total Test Responses: ${responses.length}
-
-Create a comprehensive, actionable 5-step roadmap. Each step must include:
-1. A clear, actionable goal title
-2. Detailed execution plan (day-wise or weekly breakdown)
-3. Specific resource/tool recommendations (apps, websites, worksheets, manipulatives)
+    const systemPrompt = `You are an expert dyscalculia remediation specialist. Based on the detailed diagnostic test results and student answers below, create a highly personalized 5-step remediation roadmap.
+    
+    Student Profile:
+    - Age: ${age} years old
+    - Detected Blockers: ${blockersText}
+    - Total Test Responses: ${responses.length}
+    
+    Detailed Test Responses List:
+    ${responsesText}
+    
+    Create a comprehensive, actionable 5-step roadmap customized exactly to the cognitive mistakes, patterns of errors, and constructs the student struggled with. Each step must include:
+    1. A clear, actionable goal title
+    2. Detailed execution plan (day-wise or weekly breakdown)
+    3. Specific resource/tool recommendations (apps, websites, worksheets, manipulatives)
 
 Return ONLY a JSON object with this exact structure:
 {
