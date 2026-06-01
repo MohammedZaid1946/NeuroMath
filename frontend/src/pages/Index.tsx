@@ -37,7 +37,7 @@ export default function Index() {
                 onClick={() => navigate("/auth")}
                 className="text-lg px-8 py-6"
               >
-                Teacher Login
+                Login
               </Button>
             </div>
           </div>
