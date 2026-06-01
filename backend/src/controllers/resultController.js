@@ -33,13 +33,23 @@ export const getStudentResults = async (req, res) => {
 // @access  Private (Teacher/Admin)
 export const getTeacherAllResults = async (req, res) => {
   try {
-    // Find all results, populate student user details and test session details
-    const results = await Result.find()
+    let query = {};
+
+    // If the logged-in user is a Teacher, isolate results to only their joined students
+    if (req.user.role === 'teacher') {
+      const students = await User.find({ teacherId: req.user._id }).select('_id');
+      const studentIds = students.map(s => s._id);
+      
+      // Only find results belonging to those students
+      query = { studentId: { $in: studentIds } };
+    }
+
+    // Find results, populate student user details and test session details
+    const results = await Result.find(query)
       .populate('studentId', 'name email')
       .populate('testSessionId')
       .sort({ generatedAt: -1 });
 
-    // Format list: group or return flattened results list
     return res.json({
       success: true,
       data: results,
@@ -58,9 +68,16 @@ export const getTeacherStudentResults = async (req, res) => {
     const studentId = req.params.id;
 
     // Verify student exists
-    const student = await User.findById(studentId).select('name email role');
+    const student = await User.findById(studentId).select('name email role teacherId');
     if (!student || student.role !== 'student') {
       return res.status(404).json({ success: false, error: 'Student not found' });
+    }
+
+    // If logged in as a Teacher, verify that this student is joined to their classroom
+    if (req.user.role === 'teacher') {
+      if (!student.teacherId || student.teacherId.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ success: false, error: 'Not authorized to view diagnostics of a student outside your classroom' });
+      }
     }
 
     const results = await Result.find({ studentId })
@@ -70,7 +87,12 @@ export const getTeacherStudentResults = async (req, res) => {
     return res.json({
       success: true,
       data: {
-        student,
+        student: {
+          _id: student._id,
+          name: student.name,
+          email: student.email,
+          role: student.role,
+        },
         results,
       },
     });

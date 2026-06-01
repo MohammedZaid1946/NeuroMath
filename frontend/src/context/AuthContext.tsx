@@ -6,6 +6,8 @@ interface User {
   name: string;
   email: string;
   role: 'student' | 'teacher' | 'admin';
+  classCode?: string;
+  teacherId?: any;
 }
 
 interface AuthContextType {

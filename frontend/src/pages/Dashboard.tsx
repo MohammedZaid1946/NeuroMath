@@ -5,8 +5,9 @@ import axiosInstance from "../api/axios";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Brain, LogOut, Plus, User, Users, Trash2, Play, Calendar, CheckCircle, BarChart3, AlertCircle, ArrowRight, Mail } from "lucide-react";
+import { Brain, LogOut, Plus, User, Users, Trash2, Play, Calendar, CheckCircle, BarChart3, AlertCircle, ArrowRight, Mail, Key } from "lucide-react";
 
 interface Blocker {
   blocker_name: string;
@@ -50,9 +51,50 @@ export default function Dashboard() {
   // Student specific state
   const [activeSession, setActiveSession] = useState<TestSession | null>(null);
   const [studentResults, setStudentResults] = useState<any[]>([]);
+  const [classCodeInput, setClassCodeInput] = useState("");
+  const [joiningClass, setJoiningClass] = useState(false);
   
   // Teacher specific state
   const [allResults, setAllResults] = useState<Result[]>([]);
+
+  const handleJoinClass = async () => {
+    if (!classCodeInput.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Validation Error",
+        description: "Please enter the Class Code.",
+      });
+      return;
+    }
+
+    setJoiningClass(true);
+    try {
+      const res = await axiosInstance.post("/auth/join-class", {
+        classCode: classCodeInput,
+      });
+
+      if (res.data.success) {
+        toast({
+          title: "Classroom Linked!",
+          description: res.data.message,
+        });
+        
+        // Save new user profile locally
+        localStorage.setItem("user", JSON.stringify(res.data.data));
+        
+        // Reload to let AuthContext capture updated user profile
+        window.location.reload();
+      }
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Connection Failed",
+        description: error.response?.data?.error || "Could not link to classroom.",
+      });
+    } finally {
+      setJoiningClass(false);
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -189,6 +231,48 @@ export default function Dashboard() {
                 </Button>
               )}
             </div>
+
+            {/* Classroom Connection Card */}
+            <Card className="border-border/50 bg-card/45 backdrop-blur-sm shadow-md">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-lg font-bold flex items-center gap-2">
+                  <Brain className="w-5 h-5 text-primary" />
+                  Classroom Connection
+                </CardTitle>
+                <CardDescription>
+                  Link your account to your teacher's classroom to share your diagnostic progress and roadmaps.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {(user as any)?.teacherId ? (
+                  <div className="flex items-center gap-3 bg-success/10 border border-success/20 rounded-xl p-4">
+                    <CheckCircle className="w-6 h-6 text-success" />
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Successfully linked to your classroom!</p>
+                      <p className="text-xs text-muted-foreground">
+                        Teacher: <strong className="text-foreground">{(user as any).teacherId.name}</strong> ({(user as any).teacherId.email})
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                    <div className="flex-1 relative">
+                      <Key className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        type="text"
+                        placeholder="Enter your 7-character Class Code (e.g. NM-H3K9)..."
+                        value={classCodeInput}
+                        onChange={(e) => setClassCodeInput(e.target.value)}
+                        className="pl-9 bg-background/50 border-border/50 focus:border-primary/50 font-mono"
+                      />
+                    </div>
+                    <Button onClick={handleJoinClass} disabled={joiningClass} className="shadow-md">
+                      {joiningClass ? "Linking..." : "Link Classroom"}
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Unfinished Test Session Panel */}
             {activeSession && (
@@ -329,8 +413,15 @@ export default function Dashboard() {
           <div className="space-y-8">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h2 className="text-3xl font-bold tracking-tight text-foreground">Classroom Roster</h2>
-                <p className="text-muted-foreground">Monitor student diagnostics, cognitive blockers, and personalized roadmaps.</p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <h2 className="text-3xl font-bold tracking-tight text-foreground">Classroom Roster</h2>
+                  {(user as any)?.classCode && (
+                    <Badge className="bg-primary/20 text-primary border-none text-sm font-bold font-mono py-1 px-3">
+                      Class Code: {(user as any).classCode}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-muted-foreground mt-1">Monitor student diagnostics, cognitive blockers, and personalized roadmaps.</p>
               </div>
             </div>
 

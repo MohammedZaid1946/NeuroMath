@@ -14,6 +14,7 @@ interface Teacher {
   _id: string;
   name: string;
   email: string;
+  classCode?: string;
   createdAt: string;
 }
 
@@ -82,9 +83,10 @@ export default function Admin() {
       });
 
       if (res.data.success) {
+        const createdTeacher = res.data.data;
         toast({
           title: "Teacher Account Created!",
-          description: `Teacher ${teacherName} is now registered.`,
+          description: `Teacher ${teacherName} is registered. Class Code: ${createdTeacher?.classCode || "N/A"}`,
         });
 
         // Reset form
@@ -277,7 +279,14 @@ export default function Admin() {
                     {teachers.map((teacher) => (
                       <div key={teacher._id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-muted/10 transition-all">
                         <div className="space-y-1">
-                          <h4 className="font-semibold text-foreground text-lg">{teacher.name}</h4>
+                          <div className="flex items-center gap-2.5">
+                            <h4 className="font-semibold text-foreground text-lg">{teacher.name}</h4>
+                            {teacher.classCode && (
+                              <Badge className="bg-primary/20 text-primary border-none text-xs font-bold font-mono">
+                                {teacher.classCode}
+                              </Badge>
+                            )}
+                          </div>
                           <p className="text-sm text-muted-foreground flex items-center gap-1.5">
                             <Mail className="w-3.5 h-3.5 text-muted-foreground" />
                             {teacher.email}
