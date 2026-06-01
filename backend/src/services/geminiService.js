@@ -114,8 +114,8 @@ async function callAI(systemPrompt, userPrompt) {
   const maxRetries = 3;
 
   if (GEMINI_API_KEY) {
-    // Model fallback sequence: On high demand, fall back to highly-stable gemini-1.5-flash
-    const models = ["gemini-2.5-flash", "gemini-1.5-flash"];
+    // Model fallback sequence: On high demand, fall back to stable gemini-2.0-flash and gemini-flash-latest
+    const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest"];
     let backoff = 1000;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -170,7 +170,7 @@ async function callAI(systemPrompt, userPrompt) {
   }
 
   if (LOVABLE_API_KEY) {
-    const models = ["google/gemini-2.5-flash", "google/gemini-1.5-flash"];
+    const models = ["google/gemini-2.5-flash", "google/gemini-2.0-flash", "google/gemini-flash-latest"];
     let backoff = 1000;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
