@@ -197,15 +197,15 @@ export default function Dashboard() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Brain className="w-8 h-8 text-primary" />
-              <h1 className="text-2xl font-bold">NeuroMath AI Dashboard</h1>
+              <Brain className="w-8 h-8 text-primary flex-shrink-0" />
+              <h1 className="text-xl sm:text-2xl font-bold truncate">NeuroMath AI Dashboard</h1>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground bg-card px-3 py-1.5 rounded-full border border-border/50">
+            <div className="flex items-center gap-2.5 sm:gap-4">
+              <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground bg-card px-3 py-1.5 rounded-full border border-border/50">
                 <User className="w-4 h-4 text-primary" />
                 {user?.name} ({user?.role === "student" ? "Student" : "Teacher"})
               </div>
-              <Button variant="outline" size="sm" onClick={handleSignOut}>
+              <Button variant="outline" size="sm" onClick={handleSignOut} className="flex-shrink-0">
                 <LogOut className="w-4 h-4 mr-2" />
                 Sign Out
               </Button>
